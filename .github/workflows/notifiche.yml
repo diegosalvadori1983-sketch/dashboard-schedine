@@ -1,3 +1,4 @@
+
 name: Notifiche schedine
 
 on:
@@ -6,7 +7,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: controllo-schedine
+  cancel-in-progress: false
 
 jobs:
   controlla:
@@ -14,6 +19,8 @@ jobs:
     steps:
       - name: Scarica repository
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Configura Python
         uses: actions/setup-python@v5
@@ -24,3 +31,13 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python controlla_schedine.py
+
+      - name: Salva risultati controllati
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add stato_risultati.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Aggiorna stato risultati schedine"
+            git push origin HEAD:main
+          fi
