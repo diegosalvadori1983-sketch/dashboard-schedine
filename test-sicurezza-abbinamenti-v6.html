@@ -1,0 +1,33 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>V6 · Sicurezza abbinamenti</title><style>*{box-sizing:border-box}body{margin:0;background:#edf4fc;color:#183451;font:15px system-ui,sans-serif}main{max-width:760px;margin:auto;padding:22px 14px 55px}h1{font-size:25px;color:#103e77}.card{background:white;border:1px solid #d6e4f2;border-radius:17px;padding:18px;margin:14px 0}button{width:100%;background:#075bb6;color:white;border:0;border-radius:12px;padding:16px;font-size:16px;font-weight:800}.sub{color:#62758b;font-size:13px;line-height:1.5}.item{border-top:1px solid #e2eaf2;padding:13px 0}.ok{color:#137c4c}.bad{color:#b23b3b}.pill{display:inline-block;padding:5px 9px;border-radius:7px;background:#eaf3ff;margin:5px 5px 0 0}a{color:#075bb6}</style></head><body><main><h1>⚽ V6 · Sicurezza abbinamenti</h1><p class="sub">Controllo con incontri inventati per verificare che un risultato non venga associato alla partita sbagliata. Nessuna connessione a Firebase, nessuna modifica alla V5.</p><section class="card"><button id="run">Esegui i controlli di sicurezza</button><p id="summary" class="sub">Pronto per il test.</p></section><section class="card" id="details" hidden></section><p class="sub"><a href="./">Torna alla dashboard V5</a></p></main><script>
+const norm=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+const groups=[['marsiglia','marseille','olympique de marseille','olympique marseille'],['tolosa','tolosa fc','toulouse','toulouse fc'],['lione','lyon','olympique lyonnais','olympique lyon'],['racing santander','racing de santander','real racing club','racing club de santander'],['como','como 1907','como calcio'],['venezia','venezia fc'],['lazio','ss lazio'],['cagliari','cagliari calcio'],['real madrid','real madrid cf']];
+const idx=new Map();groups.forEach((g,i)=>g.forEach(x=>idx.set(norm(x),i)));
+function same(a,b){const x=norm(a),y=norm(b);return !!x&&!!y&&(x===y||(idx.has(x)&&idx.get(x)===idx.get(y)))}
+function teamMatches(name,team){return [team?.name,team?.shortName,team?.tla].some(v=>same(name,v))}
+function matchLeg(l,m){return teamMatches(l.home,m.homeTeam)&&teamMatches(l.away,m.awayTeam)}
+function utcDate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s)?Date.parse(s+'T00:00:00Z'):NaN}
+function shiftDay(s,n){const d=new Date(s+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}
+function classify(leg,fixtures){if(!Number.isFinite(utcDate(leg.date)))return 'no-date';const exact=fixtures.filter(m=>m.date===leg.date&&matchLeg(leg,m));if(exact.length>1)return 'ambiguous';if(exact.length===1){const m=exact[0];if(!m.utcDate||!Number.isFinite(Date.parse(m.utcDate)))return 'review-time';if(leg.kickoff){const t=Date.parse(leg.kickoff);if(!Number.isFinite(t)||Math.abs(Date.parse(m.utcDate)-t)>2*3600000)return 'review-time'}return m.status==='FINISHED'?'matched-finished':'matched-wait'}const near=fixtures.filter(m=>[shiftDay(leg.date,-1),shiftDay(leg.date,1)].includes(m.date)&&matchLeg(leg,m));return near.length?'review-near':'not-found'}
+const f=(home,away,date,status='FINISHED',utcDate)=>({homeTeam:{name:home},awayTeam:{name:away},date,status,utcDate:utcDate===undefined?date+'T19:00:00Z':utcDate});
+const base=f('Olympique de Marseille','Toulouse FC','2026-11-01');
+const cases=[
+['Nomi equivalenti in francese',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01'},[base],'matched-finished'],
+['Casa e trasferta invertite',{home:'Tolosa FC',away:'Marsiglia',date:'2026-11-01'},[base],'not-found'],
+['Squadra avversaria differente',{home:'Marsiglia',away:'Lione',date:'2026-11-01'},[base],'not-found'],
+['Partita un giorno dopo',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01'},[f('Marseille','Toulouse','2026-11-02')],'review-near'],
+['Partita un giorno prima',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01'},[f('Marseille','Toulouse','2026-10-31')],'review-near'],
+['Partita due giorni dopo',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01'},[f('Marseille','Toulouse','2026-11-03')],'not-found'],
+['Due incontri uguali nella data',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01'},[base,base],'ambiguous'],
+['Partita ancora da giocare',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01'},[f('Marseille','Toulouse','2026-11-01','TIMED')],'matched-wait'],
+['Data assente',{home:'Marsiglia',away:'Tolosa FC',date:''},[base],'no-date'],
+['Data non valida',{home:'Marsiglia',away:'Tolosa FC',date:'domani'},[base],'no-date'],
+['Nomi Como Venezia',{home:'Como',away:'Venezia',date:'2026-11-01'},[f('Como 1907','Venezia FC','2026-11-01')],'matched-finished'],
+['Nomi Lazio Cagliari',{home:'Lazio',away:'Cagliari',date:'2026-11-01'},[f('SS Lazio','Cagliari Calcio','2026-11-01')],'matched-finished'],
+['Nomi Racing Santander',{home:'Racing Santander',away:'Real Madrid',date:'2026-11-01'},[f('Real Racing Club','Real Madrid CF','2026-11-01')],'matched-finished'],
+['Orario discordante',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01',kickoff:'2026-11-01T12:00:00Z'},[base],'review-time'],
+['Orario compatibile',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01',kickoff:'2026-11-01T20:00:00Z'},[base],'matched-finished'],
+['Orario API assente',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01'},[{...base,utcDate:null}],'review-time'],
+['Nessuna partita disponibile',{home:'Marsiglia',away:'Tolosa FC',date:'2026-11-01'},[],'not-found']
+];
+document.querySelector('#run').onclick=()=>{const rows=cases.map(([name,leg,fixtures,expected])=>({name,expected,got:classify(leg,fixtures)}));const good=rows.filter(x=>x.expected===x.got).length;document.querySelector('#summary').innerHTML=`<strong class="${good===rows.length?'ok':'bad'}">${good} controlli superati su ${rows.length}</strong> · ${rows.length-good} errori. Solo simulazione, nessun dato reale modificato.`;document.querySelector('#details').hidden=false;document.querySelector('#details').innerHTML='<h2>Dettaglio controlli</h2>'+rows.map(r=>`<div class="item"><b>${r.name}</b><div class="${r.expected===r.got?'ok':'bad'}">${r.expected===r.got?'✓':'✗'} Atteso: ${r.expected} · Ottenuto: ${r.got}</div></div>`).join('')};
+</script></body></html>
