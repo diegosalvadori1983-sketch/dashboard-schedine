@@ -1,0 +1,79 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Le mie schedine · V6.5 Live</title><style>body{margin:0;background:#f5f6f8;font:16px system-ui;color:#26364b;padding:25px}</style></head><body><p>Caricamento V6.5 Live…</p><script>
+(async()=>{
+try{
+const response=await fetch('./anteprima-grafica-v6-2.html',{cache:'no-store'});
+if(!response.ok)throw Error('Anteprima V6.2 non trovata: '+response.status);
+let preview=await response.text();
+const patch=`
+/* V6.5 - campionati riconosciuti anche per schedine manuali */
+const leagueForV65=l=>{
+ if(l[2])return l[2];
+ const teams=(String(l[0]||'')+' '+String(l[1]||'')).toLowerCase();
+ const mapping={
+ 'ita.1':['como','venezia','frosinone','torino','lazio','cagliari','milan','inter','udinese','roma','napoli','juventus','atalanta','fiorentina','bologna','genoa','parma','lecce','pisa','sassuolo','verona','cremonese'],
+ 'eng.1':['bournemouth','leeds','manchester','brighton','arsenal','chelsea','liverpool','tottenham','newcastle','aston villa','everton','fulham','brentford','burnley','sunderland','west ham','wolves','nottingham','crystal palace'],
+ 'ger.1':['werder','hoffenheim','bayern','dortmund','union berlin','cologne','koln','leverkusen','stuttgart','leipzig','frankfurt','freiburg','wolfsburg','mainz','augsburg','hamburg','gladbach'],
+ 'esp.1':['barcelona','alaves','real madrid','atletico madrid','sevilla','betis','valencia','villarreal','sociedad','bilbao','osasuna','getafe','celta','mallorca','girona','espanyol'],
+ 'fra.1':['paris saint','psg','marseille','lyon','monaco','lille','nice','lens','rennes','nantes','strasbourg']
+ };
+ let hits=[];
+ for(const [league,names] of Object.entries(mapping))if(names.some(n=>teams.includes(n)))hits.push(league);
+ return hits.length===1?hits[0]:'';
+};
+const origFindV65=find;
+find=function(l){if(l[2])return origFindV65(l);const league=leagueForV65(l);if(!league)return undefined;const probe=[...l];probe[2]=league;return origFindV65(probe)};
+const origJudgeV65=judge;
+judge=function(l,e){
+ let original=origJudgeV65(l,e);
+ if(!e)return original;
+ const st=e.status?.type?.state;
+ if(st!=='in'&&st!=='post')return original;
+ const c=e.competitions?.[0]?.competitors||[];
+ const h=c.find(x=>x.homeAway==='home'),a=c.find(x=>x.homeAway==='away');
+ if(!h||!a||h.score==null||a.score==null)return original;
+ const hs=Number(h.score),as=Number(a.score),total=hs+as;
+ const pred=String(l[6]||'').toLowerCase().replace(/,/g,'.').replace(/\\s+/g,' ').trim();
+ const normalized=pred.replace(/\\s+/g,'');
+ const side=/(?:^|\\b)(1|x|2)(?:\\s*\\+|\\s*$)/i.exec(pred);
+ let result=null,conditions=[];
+ if(side){const v=side[1].toLowerCase();conditions.push(v==='1'?hs>as:v==='2'?as>hs:hs===as)}
+ const over=pred.match(/over\\s*(\\d+(?:\\.\\d+)?)/i);
+ const under=pred.match(/under\\s*(\\d+(?:\\.\\d+)?)/i);
+ if(over)conditions.push(total>Number(over[1]));
+ if(under)conditions.push(total<Number(under[1]));
+ if(/(?:gol\\s*\\/\\s*gol|goal\\s*\\/\\s*goal|\\bgg\\b|entrambe.*segnano)/i.test(pred))conditions.push(hs>0&&as>0);
+ if(/(?:no\\s*gol|no\\s*goal|\\bng\\b)/i.test(pred))conditions.push(hs===0||as===0);
+ if(conditions.length)result=conditions.every(Boolean);
+ if(result===null)return original;
+ const score=hs+' – '+as,minute=matchMinute(e);
+ if(st==='post')return {score,label:result?'✓ Esito favorevole':'✕ Esito sfavorevole',kind:result?'good':'bad',minute:'',settled:true};
+ return {score,label:result?'● LIVE · al momento OK':'● LIVE · in corso',kind:'live',minute};
+};
+`;
+const css=`
+.ticket-body .event{padding:10px 12px!important}
+.ticket-body .event-head{margin-bottom:4px!important}
+.ticket-body .match{font-size:16px!important;line-height:1.3!important}
+.ticket-body .bet{margin-top:5px!important}
+.ticket-body .manual{margin-top:7px!important;padding-top:7px!important}
+.ticket-body .manual select{min-height:35px!important;padding:7px!important}
+.ticket>summary{padding:12px!important}
+`;
+const injection=`
+const marker='function matchMinute(e){';
+if(!s.includes(marker))throw Error('Punto di inserimento risultati non trovato');
+s=s.replace(marker,${JSON.stringify(patch)}+'\\n'+marker);
+const keyExpr="t.legs.filter(l=>l[2]&&l[3]).map(l=>l[2]+'-'+l[3])";
+if(!s.includes(keyExpr))throw Error('Ricerca fonti non trovata');
+s=s.replace(keyExpr,"t.legs.filter(l=>l[3]&&(l[2]||leagueForV65(l))).map(l=>(l[2]||leagueForV65(l))+'-'+l[3])");
+s=s.replace('</style>',${JSON.stringify(css)}+'</style>');
+s=s.replace('Anteprima grafica V6.2 · sola lettura','Anteprima V6.5 · risultati ESPN live · sola lettura');
+s=s.replace('Dati non disponibili','In attesa di dati ESPN');
+`;
+const anchor='document.open();document.write(s);document.close();';
+if(!preview.includes(anchor))throw Error('Punto di inserimento anteprima non trovato');
+preview=preview.replace(anchor,injection+'\n'+anchor);
+document.open();document.write(preview);document.close();
+}catch(e){document.body.textContent='Impossibile caricare la V6.5: '+e.message;console.error(e)}
+})();
+</script></body></html>
