@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V6 · Diagnostica risultati</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color:#183653;background:#eef5fd}*{box-sizing:border-box}body{margin:0}main{max-width:650px;margin:auto;padding:24px 16px 60px}h1{font-size:25px}p{line-height:1.5;color:#516579}.card{background:#fff;border:1px solid #d5e2ef;border-radius:20px;padding:20px;margin:16px 0}label{display:block;font-weight:650;margin:14px 0 6px}input{width:100%;padding:14px;border:1px solid #c8d7e5;border-radius:12px;font-size:16px}button{background:#1262b5;color:white;border:0;border-radius:13px;padding:15px 20px;font-size:16px;font-weight:700;margin-top:16px;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;background:#f3f7fc;border-radius:12px;padding:14px}strong{color:#173a5e}.good{color:#19704a}.warn{color:#a46a13}.bad{color:#a42b37}small{color:#667}
+</style>
+</head>
+<body><main>
+<h1>⚽ V6 · Diagnostica API partite</h1>
+<p>Verifica quali incontri restituisce football-data.org tramite il Worker. Non accede a Firebase, non modifica schedine e non salva dati.</p>
+<section class="card">
+<label for="endpoint">Indirizzo pubblico Cloudflare Worker (senza token)</label>
+<input id="endpoint" value="https://dashboard-schedine-risultati.diegosalvadori1983.workers.dev/" spellcheck="false" autocapitalize="off">
+<label for="from">Dal giorno</label><input id="from" type="date" value="2026-10-31">
+<label for="to">Al giorno</label><input id="to" type="date" value="2026-11-01">
+<button id="go">Controlla partite</button>
+<p id="status" role="status">Pronto per il controllo.</p>
+</section>
+<section class="card"><h2>Risposta API</h2><div id="summary">Non ancora eseguito.</div><pre id="details"></pre></section>
+<section class="card"><h2>Prime partite restituite</h2><div id="matches">Non ancora eseguito.</div></section>
+<p><small>Condividi uno screenshot del riepilogo e delle prime partite. Non inserire mai token o chiavi API.</small></p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+$('go').addEventListener('click',async()=>{
+ $('go').disabled=true;$('status').textContent='Richiesta in corso…';$('summary').textContent='';$('details').textContent='';$('matches').textContent='';
+ try{
+  const base=new URL($('endpoint').value.trim());
+  if(base.protocol!=='https:'||!base.hostname.endsWith('.workers.dev'))throw Error('Inserisci un URL HTTPS di Cloudflare Workers valido.');
+  const from=$('from').value,to=$('to').value;
+  if(!from||!to||to<from||((Date.parse(to)-Date.parse(from))/86400000)>7)throw Error('Intervallo non valido: massimo 7 giorni.');
+  const url=new URL('/matches',base);url.searchParams.set('dateFrom',from);url.searchParams.set('dateTo',to);
+  const response=await fetch(url,{method:'GET',cache:'no-store'});
+  const raw=await response.text();let data;
+  try{data=JSON.parse(raw)}catch{data=null}
+  $('status').textContent='Risposta ricevuta.';
+  const list=Array.isArray(data?.matches)?data.matches:null;
+  const count=data?.resultSet?.count;
+  $('summary').innerHTML=`<p><strong>HTTP:</strong> <span class="${response.ok?'good':'bad'}">${response.status} ${response.statusText}</span></p><p><strong>matches:</strong> ${list?list.length:'campo assente'}</p><p><strong>resultSet.count:</strong> ${Number.isFinite(count)?count:'campo assente'}</p><p><strong>competitions:</strong> ${Array.isArray(data?.competitions)?data.competitions.length:'campo assente'}</p>`;
+  const info={message:data?.message??null,error:data?.error??null,code:data?.errorCode??null,resultSet:data?.resultSet??null,competitionCodes:[...new Set((list||[]).map(m=>m.competition?.code).filter(Boolean))]};
+  $('details').textContent=JSON.stringify(info,null,2);
+  if(list){$('matches').textContent=list.length?'':'';for(const m of list.slice(0,30)){const p=document.createElement('p');p.style.borderBottom='1px solid #e2eaf3';p.style.paddingBottom='10px';p.textContent=`${m.utcDate||'?'} · ${m.competition?.name||'?'} (${m.competition?.code||'?'}) · ${m.homeTeam?.name||'?'} – ${m.awayTeam?.name||'?'} · ${m.status||'?'} · ${m.score?.fullTime?.home??'-'}:${m.score?.fullTime?.away??'-'}`;$('matches').append(p)}if(!list.length)$('matches').textContent='L’API ha restituito zero partite per queste date.'}
+  else $('matches').textContent='Nessun elenco matches presente nella risposta.';
+ }catch(err){$('status').textContent='Errore: '+err.message;$('status').className='bad';$('summary').textContent='Nessun risultato disponibile.'}
+ finally{$('go').disabled=false}
+});
+</script>
+</body></html>
