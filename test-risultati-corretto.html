@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Test risultati calcio</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:light}body{background:#f3f6fb;color:#17243b;margin:0;padding:20px}.panel{max-width:520px;margin:20px auto;background:white;border-radius:20px;padding:24px;box-shadow:0 8px 28px #10203a14}h1{font-size:1.4rem;margin:0 0 10px}p{line-height:1.5;color:#526176}label{font-weight:600;display:block;margin-top:16px}input{box-sizing:border-box;width:100%;font:inherit;padding:12px;border:1px solid #cbd5e1;border-radius:10px;margin-top:6px}button{width:100%;background:#1856d8;color:white;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:700;margin-top:20px}button:disabled{opacity:.6}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f5f9;border-radius:10px;padding:14px;font-size:.85rem}small{color:#64748b}</style>
+</head>
+<body><main class="panel"><h1>⚽ Test collegamento risultati</h1><p>Controllo della comunicazione tra GitHub Pages, Cloudflare Worker e football-data.org. Non modifica la dashboard o Firebase.</p><label for="date">Data delle partite</label><input id="date" type="date"><button id="run">Avvia test</button><p id="status" role="status">Pronto per il test.</p><pre id="result" hidden></pre><small>La pagina deve essere aperta dall'indirizzo GitHub Pages, non come file locale.</small></main>
+<script>
+const endpoint='https://dashboard-schedine-risultati.diegosalvadori1983.workers.dev/matches';
+const date=document.getElementById('date'),button=document.getElementById('run'),status=document.getElementById('status'),result=document.getElementById('result');
+const today=new Date();date.value=[today.getFullYear(),String(today.getMonth()+1).padStart(2,'0'),String(today.getDate()).padStart(2,'0')].join('-');
+button.addEventListener('click',async()=>{const next=new Date(date.value+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+1);const dateTo=next.toISOString().slice(0,10);button.disabled=true;result.hidden=true;status.textContent='Collegamento in corso…';try{const response=await fetch(endpoint+'?dateFrom='+encodeURIComponent(date.value)+'&dateTo='+encodeURIComponent(dateTo),{cache:'no-store'});const body=await response.text();let data;try{data=JSON.parse(body)}catch{data=null}if(response.ok&&data&&Array.isArray(data.matches)){status.textContent='✅ Collegamento riuscito! HTTP '+response.status+'. Partite restituite: '+data.matches.length+'.';result.textContent=JSON.stringify({competitions:data.resultSet?.competitions,partite:data.matches.slice(0,3).map(m=>({competizione:m.competition?.name,casa:m.homeTeam?.name,trasferta:m.awayTeam?.name,stato:m.status,risultato:m.score?.fullTime}))},null,2)}else{status.textContent='⚠️ Risposta HTTP '+response.status+'.';result.textContent=data?JSON.stringify(data,null,2):body.slice(0,1200)}result.hidden=false}catch(err){status.textContent='❌ Richiesta non riuscita.';result.textContent=String(err)+'\nControlla di aver aperto questa pagina da GitHub Pages.';result.hidden=false}finally{button.disabled=false}});
+</script></body></html>
