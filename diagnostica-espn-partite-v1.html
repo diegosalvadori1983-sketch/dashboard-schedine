@@ -1,0 +1,24 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Diagnostica ESPN · Le mie schedine</title><style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#18283e;background:#f1f5f9}*{box-sizing:border-box}body{margin:0}main{max-width:760px;margin:auto;padding:22px 14px 45px}h1{font-size:26px}h2{font-size:19px}.card{background:white;border:1px solid #dce3eb;border-radius:18px;padding:18px;margin:14px 0;box-shadow:0 3px 12px #15253a0a}.muted{color:#62758b}.ok{color:#07866a}.bad{color:#bb4238}.warn{color:#946318}button{background:#0a987a;border:0;border-radius:13px;padding:15px 18px;color:white;font-weight:700;font-size:16px}button:disabled{opacity:.5}.item{border-top:1px solid #e5eaf0;padding:13px 0}.small{font-size:13px}.pill{display:inline-block;padding:3px 9px;background:#edf3f8;border-radius:7px;font-size:12px;font-weight:700}.code{overflow-wrap:anywhere;font-family:monospace;font-size:12px}.date{font-variant-numeric:tabular-nums}</style></head><body><main>
+<h1>⚽ Diagnostica risultati ESPN</h1><p class="muted">Controllo indipendente della V5. Non accede a Firebase e non modifica le schedine.</p>
+<div class="card"><p>Verifichiamo quali partite ESPN restituisce davvero per il <b>1° novembre 2026</b> e se riconosce Como–Venezia.</p><button id="run">Controlla ESPN</button><p id="state" aria-live="polite">Nessun controllo eseguito.</p></div>
+<div class="card"><h2>Riepilogo</h2><div id="summary">In attesa del controllo.</div></div>
+<div class="card"><h2>Verifica incontri della schedina</h2><div id="checks">In attesa del controllo.</div></div>
+<div class="card"><h2>Partite effettivamente restituite da ESPN</h2><div id="events">In attesa del controllo.</div></div>
+<p class="muted small">ESPN è una fonte esterna non ufficialmente documentata per questo utilizzo. Una partita assente dal feed non significa necessariamente che non venga giocata.</p>
+</main><script>
+const day='20261101',league='ita.1';
+const url='https://site.api.espn.com/apis/site/v2/sports/soccer/'+league+'/scoreboard?dates='+day+'&limit=200';
+const fixtures=[['Como','Venezia'],['Frosinone','Torino'],['Lazio','Cagliari']];
+const $=id=>document.getElementById(id);
+const clean=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+function same(want,team){let t=clean(team),w=clean(want);return t===w||(w.length>=4&&t.includes(w));}
+function info(e){let c=e.competitions?.[0]?.competitors||[];let h=c.find(x=>x.homeAway==='home'),a=c.find(x=>x.homeAway==='away');return {h:h?.team?.displayName||'',a:a?.team?.displayName||'',hs:h?.score,as:a?.score,status:e.status?.type?.name||e.status?.type?.state||'?',date:e.date||''};}
+function line(t){let d=document.createElement('div');d.className='item';d.textContent=t;return d;}
+function render(events){$('events').replaceChildren();$('checks').replaceChildren();
+ for(const [home,away] of fixtures){let matches=events.filter(e=>{let x=info(e);return same(home,x.h)&&same(away,x.a)});let d=document.createElement('div');d.className='item';let strong=document.createElement('b');strong.textContent=home+' – '+away;d.append(strong,document.createElement('br'));let label=document.createElement('span');label.className=matches.length===1?'ok':'warn';label.textContent=matches.length===1?'✓ Riconosciuta: '+info(matches[0]).status:matches.length===0?'Non presente nel feed ESPN':'Più corrispondenze: verifica necessaria';d.append(label);$('checks').append(d)}
+ if(!events.length)$('events').append(line('ESPN non ha restituito incontri per questa data.'));
+ for(let e of events){let x=info(e);let dt=x.date?new Date(x.date).toLocaleString('it-IT',{timeZone:'Europe/Rome',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'?';$('events').append(line(dt+' · '+x.h+' – '+x.a+' · '+x.status+(x.hs!=null&&x.as!=null?' · '+x.hs+'-'+x.as:'')))}
+}
+$('run').onclick=async()=>{$('run').disabled=true;$('state').textContent='Controllo in corso…';let ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),15000);try{let r=await fetch(url,{cache:'no-store',signal:ctrl.signal});if(!r.ok)throw Error('HTTP '+r.status);let data=await r.json();if(!Array.isArray(data.events))throw Error('La risposta non contiene un elenco eventi');render(data.events);let exact=data.events.filter(e=>{let x=info(e);return same('Como',x.h)&&same('Venezia',x.a)}).length;$('summary').textContent='HTTP '+r.status+' · '+data.events.length+' partite Serie A · Como–Venezia: '+(exact?'presente':'non presente')+' · Controllo: '+new Date().toLocaleString('it-IT');$('state').textContent='Controllo completato.';}catch(e){$('state').textContent='Errore: '+e.message;$('summary').textContent='Non è stato possibile leggere il feed ESPN. Questo può dipendere dalla rete, dai permessi del browser o dal servizio.';}finally{clearTimeout(timer);$('run').disabled=false;}};
+</script></body></html>
